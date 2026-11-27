@@ -3,7 +3,7 @@
 All notable changes to these modules. Versions are git tags; callers pin them
 with `?ref=`.
 
-## v1.1.0 - unreleased
+## v1.1.0 - 2026-11-28
 
 ### cognito
 
