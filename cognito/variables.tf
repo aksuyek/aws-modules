@@ -121,7 +121,7 @@ variable "logout_urls" {
 }
 
 variable "access_token_validity_minutes" {
-  description = "Lifetime of access and ID tokens in minutes (5 to 1440)."
+  description = "Lifetime of access and ID tokens in minutes (5 to 1440). Written in the units of token_validity_units."
   type        = number
   default     = 60
 
@@ -139,6 +139,101 @@ variable "refresh_token_validity_days" {
   validation {
     condition     = var.refresh_token_validity_days >= 1 && var.refresh_token_validity_days <= 3650
     error_message = "refresh_token_validity_days must be between 1 and 3650."
+  }
+}
+
+variable "prevent_user_existence_errors" {
+  description = "ENABLED hides whether an email has an account. LEGACY returns UserNotFoundException, only for an app whose sign-up path depends on it (Ziffli)."
+  type        = string
+  default     = "ENABLED"
+
+  validation {
+    condition     = contains(["ENABLED", "LEGACY"], var.prevent_user_existence_errors)
+    error_message = "prevent_user_existence_errors must be ENABLED or LEGACY."
+  }
+}
+
+variable "explicit_auth_flows" {
+  description = "Overrides the client's auth flows. Null = ALLOW_USER_AUTH + ALLOW_REFRESH_TOKEN_AUTH, plus ALLOW_USER_PASSWORD_AUTH and ALLOW_USER_SRP_AUTH when PASSWORD is a first factor."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition = var.explicit_auth_flows == null || (
+      contains(coalesce(var.explicit_auth_flows, []), "ALLOW_REFRESH_TOKEN_AUTH") &&
+      alltrue([for f in coalesce(var.explicit_auth_flows, []) : contains(["ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_PASSWORD_AUTH", "ALLOW_USER_SRP_AUTH", "ALLOW_CUSTOM_AUTH", "ALLOW_ADMIN_USER_PASSWORD_AUTH"], f)])
+    )
+    error_message = "explicit_auth_flows must include ALLOW_REFRESH_TOKEN_AUTH and contain only ALLOW_* Cognito flow names."
+  }
+}
+
+variable "oauth_scopes" {
+  description = "OAuth scopes of the client, used only when callback_urls is non-empty."
+  type        = list(string)
+  default     = ["aws.cognito.signin.user.admin", "email", "openid", "profile"]
+}
+
+variable "auth_session_validity_minutes" {
+  description = "How long a sign-in session (e.g. waiting for the email code) stays valid, 3 to 15 minutes."
+  type        = number
+  default     = 15
+
+  validation {
+    condition     = var.auth_session_validity_minutes >= 3 && var.auth_session_validity_minutes <= 15
+    error_message = "auth_session_validity_minutes must be between 3 and 15."
+  }
+}
+
+variable "token_validity_units" {
+  description = "Units Cognito stores the token lifetimes in. The lifetimes themselves stay in access_token_validity_minutes and refresh_token_validity_days and are converted (60 minutes with \"hours\" is written as 1). Null writes no lifetimes or units, keeping Cognito's defaults (Futbolmetre)."
+  type = object({
+    access_token  = optional(string, "minutes")
+    id_token      = optional(string, "minutes")
+    refresh_token = optional(string, "days")
+  })
+  default = {}
+
+  validation {
+    condition = var.token_validity_units == null || (
+      contains(["minutes", "hours"], try(var.token_validity_units.access_token, "")) &&
+      contains(["minutes", "hours"], try(var.token_validity_units.id_token, "")) &&
+      contains(["minutes", "hours", "days"], try(var.token_validity_units.refresh_token, ""))
+    )
+    error_message = "access_token and id_token units must be minutes or hours; refresh_token minutes, hours or days."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Pool password policy and Lambda permissions
+# ---------------------------------------------------------------------------
+
+variable "password_policy" {
+  description = "Password policy. The default is NIST SP 800-63B: at least 10 characters, no character-class rules. Pass an existing pool's policy to keep it."
+  type = object({
+    minimum_length                   = optional(number, 10)
+    require_lowercase                = optional(bool, false)
+    require_uppercase                = optional(bool, false)
+    require_numbers                  = optional(bool, false)
+    require_symbols                  = optional(bool, false)
+    temporary_password_validity_days = optional(number, 7)
+  })
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = var.password_policy.minimum_length >= 8 && var.password_policy.minimum_length <= 99
+    error_message = "password_policy.minimum_length must be between 8 and 99."
+  }
+}
+
+variable "lambda_permission_condition" {
+  description = "How each trigger's lambda:InvokeFunction permission is scoped: source_arn (this pool, the default) or source_account (the account; only to keep permissions that already exist that way, as in Futbolmetre). A change replaces the permissions."
+  type        = string
+  default     = "source_arn"
+
+  validation {
+    condition     = contains(["source_arn", "source_account"], var.lambda_permission_condition)
+    error_message = "lambda_permission_condition must be source_arn or source_account."
   }
 }
 

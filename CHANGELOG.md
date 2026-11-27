@@ -3,6 +3,28 @@
 All notable changes to these modules. Versions are git tags; callers pin them
 with `?ref=`.
 
+## v1.1.0 - unreleased
+
+### cognito
+
+Additive: every new input defaults to v1.0.0's behaviour, so callers on
+v1.0.0 can bump `?ref=` with no plan change. The inputs let Futbolmetre
+(FM-021) and Ziffli (ZF-018) move onto the module and keep their live pool and
+client settings.
+
+- `prevent_user_existence_errors` (default `"ENABLED"`; Ziffli `"LEGACY"`).
+- `password_policy` object (default the NIST rule: 10 characters, no classes).
+- `explicit_auth_flows` override (default null = the computed list).
+- `oauth_scopes` (default `aws.cognito.signin.user.admin`, `email`, `openid`, `profile`).
+- `auth_session_validity_minutes` (default 15).
+- `token_validity_units` (default minutes/minutes/days). Lifetimes stay in
+  minutes and days and are converted to these units; `null` writes no
+  lifetimes or units (Futbolmetre, where they were never set).
+- `lambda_permission_condition` (default `"source_arn"`; `"source_account"`
+  keeps Futbolmetre's existing permissions from being replaced).
+- README: the `custom_message` permission's `moved` block for Futbolmetre,
+  and the examples for Futbolmetre and Ziffli pass their live settings.
+
 ## v1.0.0 - 2026-11-27
 
 ### cognito
