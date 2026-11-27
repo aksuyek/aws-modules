@@ -18,7 +18,8 @@ with `?ref=`.
 - Inputs for first factors, SES identity and headers, the pre sign-up, post
   confirmation, post authentication, custom message and custom email sender
   triggers (with their Lambda permissions), social providers, OAuth URLs,
-  groups, token validity, hosted or custom domain, and tags.
+  groups, token validity, hosted or custom domain, `username_case_sensitive`
+  (set false on new pools) and tags. Empty-string trigger ARNs count as unset.
 - Outputs: `user_pool_id`, `user_pool_arn`, `client_id`, `issuer_url`,
   `jwks_url`, `auth_domain`, `auth_domain_cloudfront_distribution`, `group_names`.
 - Moved out of the module, into Futbolmetre: the account-linking Lambda, the

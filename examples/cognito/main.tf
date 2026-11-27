@@ -80,9 +80,10 @@ module "ziffli" {
 module "huetabig" {
   source = "../../cognito"
 
-  project_name       = "huetabig-prod"
-  domain_name        = "huetabig.ch"
-  first_auth_factors = ["EMAIL_OTP", "WEB_AUTHN", "PASSWORD"]
+  project_name            = "huetabig-prod"
+  username_case_sensitive = false
+  domain_name             = "huetabig.ch"
+  first_auth_factors      = ["EMAIL_OTP", "WEB_AUTHN", "PASSWORD"]
 
   email_source_arn       = "arn:aws:ses:eu-central-1:${local.account}:identity/huetabig.ch"
   from_email_address     = "Hüetabig <no-reply@huetabig.ch>"
@@ -98,9 +99,10 @@ module "huetabig" {
 module "weinquiz" {
   source = "../../cognito"
 
-  project_name       = "weinquiz-prod"
-  domain_name        = "weinquiz.ch"
-  first_auth_factors = ["EMAIL_OTP", "WEB_AUTHN", "PASSWORD"]
+  project_name            = "weinquiz-prod"
+  username_case_sensitive = false
+  domain_name             = "weinquiz.ch"
+  first_auth_factors      = ["EMAIL_OTP", "WEB_AUTHN", "PASSWORD"]
 
   email_source_arn       = "arn:aws:ses:eu-central-1:${local.account}:identity/weinquiz.ch"
   from_email_address     = "Weinquiz <no-reply@weinquiz.ch>"
@@ -115,9 +117,10 @@ module "weinquiz" {
 module "skiboard" {
   source = "../../cognito"
 
-  project_name       = "skiboard-prod"
-  domain_name        = "skiboard.ch"
-  first_auth_factors = ["EMAIL_OTP", "PASSWORD"]
+  project_name            = "skiboard-prod"
+  username_case_sensitive = false
+  domain_name             = "skiboard.ch"
+  first_auth_factors      = ["EMAIL_OTP", "PASSWORD"]
 
   email_source_arn       = "arn:aws:ses:eu-central-1:${local.account}:identity/skiboard.ch"
   from_email_address     = "Skiboard <no-reply@skiboard.ch>"

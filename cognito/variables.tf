@@ -13,6 +13,12 @@ variable "pool_name" {
   default     = null
 }
 
+variable "username_case_sensitive" {
+  description = "Case sensitivity of the email username. Set false for every new pool. Can only be set at creation: leave null for an existing pool (Futbolmetre, Ziffli), since a change replaces it."
+  type        = bool
+  default     = null
+}
+
 variable "domain_name" {
   description = "The product's root domain. Used as the passkey (WebAuthn) relying party."
   type        = string

@@ -22,15 +22,25 @@ locals {
 
   hosted_domain = var.custom_domain != null ? var.custom_domain : var.domain_prefix
 
+  # "" counts as unset, like null.
+  trigger_arns = {
+    pre_sign_up         = try(coalesce(var.pre_sign_up_lambda_arn), null)
+    post_confirmation   = try(coalesce(var.post_confirmation_lambda_arn), null)
+    post_authentication = try(coalesce(var.post_authentication_lambda_arn), null)
+    custom_message      = try(coalesce(var.custom_message_lambda_arn), null)
+    custom_email_sender = try(coalesce(var.custom_email_sender_lambda_arn), null)
+  }
+  custom_email_sender_kms_key_arn = try(coalesce(var.custom_email_sender_kms_key_arn), null)
+
   # Trigger name => [unqualified function ARN, permission statement id].
   # Statement ids match the ones Futbolmetre and Ziffli already use.
   lambda_triggers = {
     for name, t in {
-      pre_sign_up         = [var.pre_sign_up_lambda_arn, "AllowCognitoPreSignUp"]
-      post_confirmation   = [var.post_confirmation_lambda_arn, "AllowCognitoPostConfirmation"]
-      post_authentication = [var.post_authentication_lambda_arn, "AllowCognitoPostAuthentication"]
-      custom_message      = [var.custom_message_lambda_arn, "AllowCognitoCustomMessage"]
-      custom_email_sender = [var.custom_email_sender_lambda_arn, "AllowCognitoCustomEmailSender"]
+      pre_sign_up         = [local.trigger_arns.pre_sign_up, "AllowCognitoPreSignUp"]
+      post_confirmation   = [local.trigger_arns.post_confirmation, "AllowCognitoPostConfirmation"]
+      post_authentication = [local.trigger_arns.post_authentication, "AllowCognitoPostAuthentication"]
+      custom_message      = [local.trigger_arns.custom_message, "AllowCognitoCustomMessage"]
+      custom_email_sender = [local.trigger_arns.custom_email_sender, "AllowCognitoCustomEmailSender"]
     } : name => { arn = t[0], statement_id = t[1] } if t[0] != null
   }
 }
@@ -38,7 +48,17 @@ locals {
 resource "aws_cognito_user_pool" "this" {
   name = local.pool_name
 
-  username_attributes      = ["email"]
+  username_attributes = ["email"]
+
+  # Forces replacement, so it is only written when the caller sets it. New
+  # pools pass false; Futbolmetre and Ziffli leave it null to keep theirs.
+  dynamic "username_configuration" {
+    for_each = var.username_case_sensitive != null ? [1] : []
+    content {
+      case_sensitive = var.username_case_sensitive
+    }
+  }
+
   auto_verified_attributes = ["email"]
   mfa_configuration        = "OFF"
   deletion_protection      = "ACTIVE"
@@ -59,16 +79,16 @@ resource "aws_cognito_user_pool" "this" {
   dynamic "lambda_config" {
     for_each = length(local.lambda_triggers) > 0 ? [1] : []
     content {
-      pre_sign_up         = var.pre_sign_up_lambda_arn
-      post_confirmation   = var.post_confirmation_lambda_arn
-      post_authentication = var.post_authentication_lambda_arn
-      custom_message      = var.custom_message_lambda_arn
-      kms_key_id          = var.custom_email_sender_kms_key_arn
+      pre_sign_up         = local.trigger_arns.pre_sign_up
+      post_confirmation   = local.trigger_arns.post_confirmation
+      post_authentication = local.trigger_arns.post_authentication
+      custom_message      = local.trigger_arns.custom_message
+      kms_key_id          = local.custom_email_sender_kms_key_arn
 
       dynamic "custom_email_sender" {
-        for_each = var.custom_email_sender_lambda_arn != null ? [1] : []
+        for_each = local.trigger_arns.custom_email_sender != null ? [1] : []
         content {
-          lambda_arn     = var.custom_email_sender_lambda_arn
+          lambda_arn     = local.trigger_arns.custom_email_sender
           lambda_version = "V1_0"
         }
       }
@@ -110,12 +130,12 @@ resource "aws_cognito_user_pool" "this" {
     prevent_destroy = true
 
     precondition {
-      condition     = var.email_source_arn != null || var.custom_email_sender_lambda_arn != null
+      condition     = var.email_source_arn != null || local.trigger_arns.custom_email_sender != null
       error_message = "Set email_source_arn (SES, developer mode), or custom_email_sender_lambda_arn if the Lambda sends every mail itself."
     }
 
     precondition {
-      condition     = (var.custom_email_sender_lambda_arn == null) == (var.custom_email_sender_kms_key_arn == null)
+      condition     = (local.trigger_arns.custom_email_sender == null) == (local.custom_email_sender_kms_key_arn == null)
       error_message = "custom_email_sender_lambda_arn and custom_email_sender_kms_key_arn must be set together."
     }
   }

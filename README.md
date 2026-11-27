@@ -30,6 +30,7 @@ Every pool built from this module has, with no input to change it:
 - the Essentials tier (needed for email codes and passkeys)
 - email-only account recovery, no MFA
 - passwords of at least 10 characters with no character-class rules (NIST SP 800-63B)
+- refresh token rotation off: refresh with `InitiateAuth` `REFRESH_TOKEN_AUTH`
 - one public client: no secret, token revocation on,
   `prevent_user_existence_errors = "ENABLED"`, auth session 15 minutes, flows
   `ALLOW_USER_AUTH` + `ALLOW_REFRESH_TOKEN_AUTH`, plus `ALLOW_USER_PASSWORD_AUTH`
@@ -45,12 +46,13 @@ Lambda (or a `custom_email_sender`) that renders through its own mail layout.
 | Name | Default | Notes |
 | --- | --- | --- |
 | `project_name` | required | e.g. `huetabig-prod`; pool `<project_name>-users`, client `<project_name>-web` |
+| `username_case_sensitive` | `null` | set `false` on every new pool; fixed at creation, so leave null for Futbolmetre and Ziffli |
 | `pool_name` | `null` | only for an existing pool with another name; the name forces replacement |
 | `domain_name` | required | passkey relying party, e.g. `huetabig.ch` |
 | `first_auth_factors` | all three | subset of `PASSWORD`, `EMAIL_OTP`, `WEB_AUTHN` (Cognito always keeps `PASSWORD` in the pool policy; leaving it out removes the password flows from the client) |
 | `email_source_arn` | `null` | SES identity ARN; may be null only with `custom_email_sender_lambda_arn` |
 | `from_email_address`, `reply_to_email_address` | `null` | |
-| `pre_sign_up_lambda_arn`, `post_confirmation_lambda_arn`, `post_authentication_lambda_arn`, `custom_message_lambda_arn` | `null` | unqualified function ARNs; the module adds each `aws_lambda_permission` |
+| `pre_sign_up_lambda_arn`, `post_confirmation_lambda_arn`, `post_authentication_lambda_arn`, `custom_message_lambda_arn` | `null` | unqualified function ARNs; `""` counts as null. The module creates each `aws_lambda_permission`: callers must not, or the statement ids collide |
 | `custom_email_sender_lambda_arn` + `custom_email_sender_kms_key_arn` | `null` | set both or neither |
 | `social_identity_providers` | `[]` | e.g. `["SignInWithApple"]`; each must already exist in the pool |
 | `callback_urls`, `logout_urls` | `[]` | |
@@ -130,7 +132,8 @@ module "cognito" {
 module "cognito" {
   source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.0.0"
 
-  project_name       = "huetabig-prod"
+  project_name            = "huetabig-prod"
+  username_case_sensitive = false # new pool: set at creation
   domain_name        = "huetabig.ch"
   first_auth_factors = ["EMAIL_OTP", "WEB_AUTHN", "PASSWORD"]
 
@@ -151,7 +154,8 @@ module "cognito" {
 module "cognito" {
   source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.0.0"
 
-  project_name       = "weinquiz-prod"
+  project_name            = "weinquiz-prod"
+  username_case_sensitive = false # new pool: set at creation
   domain_name        = "weinquiz.ch"
   first_auth_factors = ["EMAIL_OTP", "WEB_AUTHN", "PASSWORD"]
 
@@ -171,7 +175,8 @@ module "cognito" {
 module "cognito" {
   source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.0.0"
 
-  project_name       = "skiboard-prod"
+  project_name            = "skiboard-prod"
+  username_case_sensitive = false # new pool: set at creation
   domain_name        = "skiboard.ch"
   first_auth_factors = ["EMAIL_OTP", "PASSWORD"]
 
