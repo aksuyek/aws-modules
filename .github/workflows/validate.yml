@@ -1,0 +1,29 @@
+name: validate
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [cognito, examples/cognito]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.3
+      - name: fmt
+        run: tofu fmt -check -recursive
+      - name: init
+        working-directory: ${{ matrix.dir }}
+        run: tofu init -backend=false -input=false
+      - name: validate
+        working-directory: ${{ matrix.dir }}
+        run: tofu validate
