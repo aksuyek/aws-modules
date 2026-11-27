@@ -15,10 +15,25 @@ locals {
   # actually offers passwords is decided by the client flows below.
   pool_first_auth_factors = distinct(concat(["PASSWORD"], var.first_auth_factors))
 
-  explicit_auth_flows = concat(
+  explicit_auth_flows = var.explicit_auth_flows != null ? var.explicit_auth_flows : concat(
     ["ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_AUTH"],
     local.password_enabled ? ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_USER_SRP_AUTH"] : [],
   )
+
+  # Token lifetimes are given in minutes and days and written to Cognito in
+  # the units of var.token_validity_units. With null units the client keeps
+  # Cognito's defaults (60 min / 60 min / 30 days) and writes no lifetimes.
+  set_token_validity = var.token_validity_units != null
+  minutes_per_unit   = { minutes = 1, hours = 60, days = 1440 }
+  access_token_validity = local.set_token_validity ? (
+    var.access_token_validity_minutes / local.minutes_per_unit[var.token_validity_units.access_token]
+  ) : null
+  id_token_validity = local.set_token_validity ? (
+    var.access_token_validity_minutes / local.minutes_per_unit[var.token_validity_units.id_token]
+  ) : null
+  refresh_token_validity = local.set_token_validity ? (
+    var.refresh_token_validity_days * 1440 / local.minutes_per_unit[var.token_validity_units.refresh_token]
+  ) : null
 
   hosted_domain = var.custom_domain != null ? var.custom_domain : var.domain_prefix
 
@@ -102,14 +117,14 @@ resource "aws_cognito_user_pool" "this" {
     }
   }
 
-  # NIST SP 800-63B: length, no character-class rules.
+  # Default: NIST SP 800-63B, length and no character-class rules.
   password_policy {
-    minimum_length                   = 10
-    require_lowercase                = false
-    require_numbers                  = false
-    require_symbols                  = false
-    require_uppercase                = false
-    temporary_password_validity_days = 7
+    minimum_length                   = var.password_policy.minimum_length
+    require_lowercase                = var.password_policy.require_lowercase
+    require_numbers                  = var.password_policy.require_numbers
+    require_symbols                  = var.password_policy.require_symbols
+    require_uppercase                = var.password_policy.require_uppercase
+    temporary_password_validity_days = var.password_policy.temporary_password_validity_days
   }
 
   dynamic "email_configuration" {
@@ -146,26 +161,39 @@ resource "aws_cognito_user_pool_client" "web" {
   user_pool_id = aws_cognito_user_pool.this.id
 
   generate_secret               = false
-  auth_session_validity         = 15
+  auth_session_validity         = var.auth_session_validity_minutes
   enable_token_revocation       = true
-  prevent_user_existence_errors = "ENABLED"
+  prevent_user_existence_errors = var.prevent_user_existence_errors
   explicit_auth_flows           = local.explicit_auth_flows
   supported_identity_providers  = concat(["COGNITO"], var.social_identity_providers)
 
   allowed_oauth_flows_user_pool_client = local.oauth_enabled
   allowed_oauth_flows                  = local.oauth_enabled ? ["code"] : null
-  allowed_oauth_scopes                 = local.oauth_enabled ? ["aws.cognito.signin.user.admin", "email", "openid", "profile"] : null
+  allowed_oauth_scopes                 = local.oauth_enabled ? var.oauth_scopes : null
   callback_urls                        = local.oauth_enabled ? var.callback_urls : null
   logout_urls                          = local.oauth_enabled ? var.logout_urls : null
 
-  access_token_validity  = var.access_token_validity_minutes
-  id_token_validity      = var.access_token_validity_minutes
-  refresh_token_validity = var.refresh_token_validity_days
+  access_token_validity  = local.access_token_validity
+  id_token_validity      = local.id_token_validity
+  refresh_token_validity = local.refresh_token_validity
 
-  token_validity_units {
-    access_token  = "minutes"
-    id_token      = "minutes"
-    refresh_token = "days"
+  dynamic "token_validity_units" {
+    for_each = local.set_token_validity ? [var.token_validity_units] : []
+    content {
+      access_token  = token_validity_units.value.access_token
+      id_token      = token_validity_units.value.id_token
+      refresh_token = token_validity_units.value.refresh_token
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition = local.set_token_validity ? (
+        floor(local.access_token_validity) == local.access_token_validity &&
+        floor(local.refresh_token_validity) == local.refresh_token_validity
+      ) : (var.access_token_validity_minutes == 60 && var.refresh_token_validity_days == 30)
+      error_message = "Token lifetimes must be whole numbers in token_validity_units. With token_validity_units = null, leave access_token_validity_minutes = 60 and refresh_token_validity_days = 30 (Cognito's defaults)."
+    }
   }
 }
 
@@ -201,5 +229,8 @@ resource "aws_lambda_permission" "trigger" {
   # The function name, not the ARN: arn:aws:lambda:<region>:<account>:function:<name>
   function_name = split(":", each.value.arn)[6]
   principal     = "cognito-idp.amazonaws.com"
-  source_arn    = aws_cognito_user_pool.this.arn
+  # Both force replacement when changed. source_account only for permissions
+  # that already exist with it (Futbolmetre).
+  source_arn     = var.lambda_permission_condition == "source_arn" ? aws_cognito_user_pool.this.arn : null
+  source_account = var.lambda_permission_condition == "source_account" ? split(":", aws_cognito_user_pool.this.arn)[4] : null
 }

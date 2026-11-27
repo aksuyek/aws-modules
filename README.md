@@ -4,7 +4,7 @@ Shared Terraform/OpenTofu modules for Aksüyek GmbH products. Each module is
 pinned by tag:
 
 ```hcl
-source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.0.0"
+source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.1.0"
 ```
 
 | Module | What it builds |
@@ -20,7 +20,7 @@ calls this module for its own pool, in its own account region (Ziffli in
 eu-central-2, the others in eu-central-1). There is no shared pool and no
 central login (decision of 25 Nov 2026, ticket AK-002).
 
-### What is fixed
+### What is fixed, and what are defaults
 
 Every pool built from this module has, with no input to change it:
 
@@ -29,14 +29,25 @@ Every pool built from this module has, with no input to change it:
   replace the pool fails instead of orphaning every user's `sub`
 - the Essentials tier (needed for email codes and passkeys)
 - email-only account recovery, no MFA
-- passwords of at least 10 characters with no character-class rules (NIST SP 800-63B)
-- refresh token rotation off: refresh with `InitiateAuth` `REFRESH_TOKEN_AUTH`
-- one public client: no secret, token revocation on,
-  `prevent_user_existence_errors = "ENABLED"`, auth session 15 minutes, flows
-  `ALLOW_USER_AUTH` + `ALLOW_REFRESH_TOKEN_AUTH`, plus `ALLOW_USER_PASSWORD_AUTH`
-  and `ALLOW_USER_SRP_AUTH` when `PASSWORD` is in `first_auth_factors`
-- OAuth code flow only when `callback_urls` is non-empty
+- the Lambda triggers' `lambda:InvokeFunction` permissions, created by the module
 - mail through the product's SES identity in `DEVELOPER` mode
+
+Defaults that a **new** pool keeps and that only an existing pool overrides,
+to keep its live settings (Futbolmetre, Ziffli):
+
+- passwords of at least 10 characters with no character-class rules (NIST SP 800-63B): `password_policy`
+- `prevent_user_existence_errors = "ENABLED"`: `prevent_user_existence_errors`
+- client flows `ALLOW_USER_AUTH` + `ALLOW_REFRESH_TOKEN_AUTH`, plus
+  `ALLOW_USER_PASSWORD_AUTH` and `ALLOW_USER_SRP_AUTH` when `PASSWORD` is in
+  `first_auth_factors`: `explicit_auth_flows`
+- OAuth scopes `aws.cognito.signin.user.admin`, `email`, `openid`, `profile`: `oauth_scopes`
+- auth session 15 minutes: `auth_session_validity_minutes`
+- token lifetimes stored in minutes/minutes/days: `token_validity_units`
+- trigger permissions scoped to the pool's ARN: `lambda_permission_condition`
+
+Always: one public client with no secret and token revocation on, refresh
+token rotation off (refresh with `InitiateAuth` `REFRESH_TOKEN_AUTH`), and the
+OAuth code flow only when `callback_urls` is non-empty.
 
 **No mail texts live here.** Each product passes its own `custom_message`
 Lambda (or a `custom_email_sender`) that renders through its own mail layout.
@@ -59,6 +70,13 @@ Lambda (or a `custom_email_sender`) that renders through its own mail layout.
 | `groups` | `{}` | `name => { description, precedence }` |
 | `access_token_validity_minutes` | `60` | also the ID token |
 | `refresh_token_validity_days` | `30` | |
+| `prevent_user_existence_errors` | `"ENABLED"` | `"LEGACY"` only for an app that relies on `UserNotFoundException` (Ziffli) |
+| `password_policy` | NIST rule | object: `minimum_length` (10), `require_lowercase`, `require_uppercase`, `require_numbers`, `require_symbols` (all false), `temporary_password_validity_days` (7); omitted fields keep these defaults |
+| `explicit_auth_flows` | `null` | overrides the computed flow list; must include `ALLOW_REFRESH_TOKEN_AUTH` |
+| `oauth_scopes` | `["aws.cognito.signin.user.admin", "email", "openid", "profile"]` | used only with OAuth |
+| `auth_session_validity_minutes` | `15` | 3 to 15 |
+| `token_validity_units` | `{ access_token = "minutes", id_token = "minutes", refresh_token = "days" }` | the units Cognito stores lifetimes in; lifetimes are converted (60 minutes in `"hours"` = 1). `null` writes no lifetimes or units and keeps Cognito's defaults (60 min / 60 min / 30 days); the two lifetime inputs must then stay at 60 and 30 |
+| `lambda_permission_condition` | `"source_arn"` | `"source_account"` only to keep permissions that already exist that way (Futbolmetre); a change replaces them |
 | `domain_prefix` | `null` | Amazon-hosted domain; needed for OAuth/social sign-in |
 | `custom_domain`, `custom_domain_certificate_arn` | `null` | e.g. `auth.futbolmetre.com` (ACM in us-east-1); wins over `domain_prefix`. The caller owns the DNS alias |
 | `tags` | `{}` | |
@@ -77,7 +95,7 @@ which CI validates. ARNs below are placeholders for each product's own resources
 
 ```hcl
 module "cognito" {
-  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.0.0"
+  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.1.0"
 
   project_name       = local.project_name # futbolmetre-prod
   domain_name        = var.domain_name    # futbolmetre.com
@@ -88,6 +106,7 @@ module "cognito" {
   reply_to_email_address = "support@${var.domain_name}"
 
   pre_sign_up_lambda_arn    = aws_lambda_function.account_linking.arn # now in the FM root
+  custom_message_lambda_arn = aws_lambda_function.custom_message.arn  # now in the FM root
   social_identity_providers = ["SignInWithApple"]
 
   callback_urls = ["https://${var.domain_name}/auth/callback", "futbolmetre://auth/callback"]
@@ -100,6 +119,15 @@ module "cognito" {
   custom_domain                 = local.auth_domain
   custom_domain_certificate_arn = module.auth_certificate.certificate_arn
 
+  # Keep the live pool's settings (no behaviour change in FM-021).
+  password_policy = {
+    minimum_length    = 8
+    require_lowercase = true
+    require_numbers   = true
+  }
+  token_validity_units        = null # lifetimes were never set
+  lambda_permission_condition = "source_account"
+
   tags = local.tags
 }
 ```
@@ -108,7 +136,7 @@ module "cognito" {
 
 ```hcl
 module "cognito" {
-  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.0.0"
+  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.1.0"
 
   project_name       = local.prefix          # ziffli-prod
   pool_name          = "${local.prefix}-parents" # existing pool name
@@ -123,6 +151,20 @@ module "cognito" {
   callback_urls = ["https://${var.domain_name}/auth/callback"]
   logout_urls   = ["https://${var.domain_name}/"]
   domain_prefix = "${local.prefix}-${data.aws_caller_identity.current.account_id}"
+
+  # Keep the live pool's settings (no behaviour change in ZF-018).
+  # LEGACY: new-parent sign-up depends on UserNotFoundException.
+  prevent_user_existence_errors = "LEGACY"
+  password_policy = {
+    minimum_length    = 12
+    require_lowercase = true
+    require_uppercase = true
+    require_numbers   = true
+  }
+  explicit_auth_flows           = ["ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+  oauth_scopes                  = ["openid", "email", "profile"]
+  auth_session_validity_minutes = 3
+  token_validity_units          = { access_token = "hours", id_token = "hours", refresh_token = "days" }
 }
 ```
 
@@ -130,7 +172,7 @@ module "cognito" {
 
 ```hcl
 module "cognito" {
-  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.0.0"
+  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.1.0"
 
   project_name            = "huetabig-prod"
   username_case_sensitive = false # new pool: set at creation
@@ -152,7 +194,7 @@ module "cognito" {
 
 ```hcl
 module "cognito" {
-  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.0.0"
+  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.1.0"
 
   project_name            = "weinquiz-prod"
   username_case_sensitive = false # new pool: set at creation
@@ -173,7 +215,7 @@ module "cognito" {
 
 ```hcl
 module "cognito" {
-  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.0.0"
+  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.1.0"
 
   project_name            = "skiboard-prod"
   username_case_sensitive = false # new pool: set at creation
@@ -211,11 +253,16 @@ moved {
   to   = module.cognito.aws_lambda_permission.trigger["pre_sign_up"]
 }
 moved {
+  from = module.cognito.aws_lambda_permission.custom_message
+  to   = module.cognito.aws_lambda_permission.trigger["custom_message"]
+}
+moved {
   from = module.cognito.aws_route53_record.auth_custom_domain[0]
   to   = aws_route53_record.auth_custom_domain # alias to module.cognito.auth_domain_cloudfront_distribution
 }
-# The account-linking Lambda, its role, policy, attachment and log group move
-# to the root the same way (module.cognito.<addr> -> <addr>).
+# The account-linking and custom-message Lambdas, their roles, policies,
+# attachments and log groups move to the root the same way
+# (module.cognito.<addr> -> <addr>).
 # aws_cognito_user_pool_domain.this -> this[0] is moved automatically.
 ```
 

@@ -39,6 +39,7 @@ module "futbolmetre" {
   reply_to_email_address = "support@futbolmetre.com"
 
   pre_sign_up_lambda_arn    = "arn:aws:lambda:eu-central-1:${local.account}:function:futbolmetre-prod-cognito-link"
+  custom_message_lambda_arn = "arn:aws:lambda:eu-central-1:${local.account}:function:futbolmetre-prod-cognito-message"
   social_identity_providers = ["SignInWithApple"]
 
   callback_urls = ["https://futbolmetre.com/auth/callback", "futbolmetre://auth/callback"]
@@ -50,6 +51,15 @@ module "futbolmetre" {
 
   custom_domain                 = "auth.futbolmetre.com"
   custom_domain_certificate_arn = "arn:aws:acm:us-east-1:${local.account}:certificate/00000000-0000-0000-0000-000000000000"
+
+  # Existing pool: keep its live settings.
+  password_policy = {
+    minimum_length    = 8
+    require_lowercase = true
+    require_numbers   = true
+  }
+  token_validity_units        = null
+  lambda_permission_condition = "source_account"
 
   tags = { Project = "futbolmetre", Environment = "prod", ManagedBy = "terraform" }
 }
@@ -72,6 +82,19 @@ module "ziffli" {
   callback_urls = ["https://ziffli.ch/auth/callback"]
   logout_urls   = ["https://ziffli.ch/"]
   domain_prefix = "ziffli-prod-${local.account}"
+
+  # Existing pool: keep its live settings.
+  prevent_user_existence_errors = "LEGACY"
+  password_policy = {
+    minimum_length    = 12
+    require_lowercase = true
+    require_uppercase = true
+    require_numbers   = true
+  }
+  explicit_auth_flows           = ["ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+  oauth_scopes                  = ["openid", "email", "profile"]
+  auth_session_validity_minutes = 3
+  token_validity_units          = { access_token = "hours", id_token = "hours", refresh_token = "days" }
 
   tags = { Application = "ziffli", Environment = "prod", ManagedBy = "terraform" }
 }
