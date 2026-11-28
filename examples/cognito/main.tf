@@ -114,6 +114,7 @@ module "huetabig" {
 
   custom_message_lambda_arn    = "arn:aws:lambda:eu-central-1:${local.account}:function:huetabig-prod-cognito-message"
   post_confirmation_lambda_arn = "arn:aws:lambda:eu-central-1:${local.account}:function:huetabig-prod-cognito-post-confirmation"
+  trigger_names                = ["custom_message", "post_confirmation"]
 
   tags = { Project = "huetabig", Environment = "prod", ManagedBy = "terraform" }
 }
@@ -132,6 +133,7 @@ module "weinquiz" {
   reply_to_email_address = "hallo@weinquiz.ch"
 
   custom_message_lambda_arn = "arn:aws:lambda:eu-central-1:${local.account}:function:weinquiz-prod-cognito-message"
+  trigger_names             = ["custom_message"]
 
   tags = { Project = "weinquiz", Environment = "prod", ManagedBy = "terraform" }
 }
@@ -150,6 +152,7 @@ module "skiboard" {
   reply_to_email_address = "hallo@skiboard.ch"
 
   custom_message_lambda_arn = "arn:aws:lambda:eu-central-1:${local.account}:function:skiboard-prod-cognito-message"
+  trigger_names             = ["custom_message"]
 
   access_token_validity_minutes = 60
   refresh_token_validity_days   = 90

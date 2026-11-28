@@ -4,7 +4,7 @@ Shared Terraform/OpenTofu modules for Aksüyek GmbH products. Each module is
 pinned by tag:
 
 ```hcl
-source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.1.0"
+source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.2.0"
 ```
 
 | Module | What it builds |
@@ -64,6 +64,7 @@ Lambda (or a `custom_email_sender`) that renders through its own mail layout.
 | `email_source_arn` | `null` | SES identity ARN; may be null only with `custom_email_sender_lambda_arn` |
 | `from_email_address`, `reply_to_email_address` | `null` | |
 | `pre_sign_up_lambda_arn`, `post_confirmation_lambda_arn`, `post_authentication_lambda_arn`, `custom_message_lambda_arn` | `null` | unqualified function ARNs; `""` counts as null. The module creates each `aws_lambda_permission`: callers must not, or the statement ids collide |
+| `trigger_names` | `null` | the triggers whose ARN is set, e.g. `["custom_message"]`. **Required when a trigger Lambda is created in the same apply** (every fresh stack): its ARN is unknown at plan time, and without this the plan fails with `Invalid for_each argument`. Must match the ARNs that are set |
 | `custom_email_sender_lambda_arn` + `custom_email_sender_kms_key_arn` | `null` | set both or neither |
 | `social_identity_providers` | `[]` | e.g. `["SignInWithApple"]`; each must already exist in the pool |
 | `callback_urls`, `logout_urls` | `[]` | |
@@ -95,7 +96,7 @@ which CI validates. ARNs below are placeholders for each product's own resources
 
 ```hcl
 module "cognito" {
-  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.1.0"
+  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.2.0"
 
   project_name       = local.project_name # futbolmetre-prod
   domain_name        = var.domain_name    # futbolmetre.com
@@ -136,7 +137,7 @@ module "cognito" {
 
 ```hcl
 module "cognito" {
-  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.1.0"
+  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.2.0"
 
   project_name       = local.prefix          # ziffli-prod
   pool_name          = "${local.prefix}-parents" # existing pool name
@@ -172,7 +173,7 @@ module "cognito" {
 
 ```hcl
 module "cognito" {
-  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.1.0"
+  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.2.0"
 
   project_name            = "huetabig-prod"
   username_case_sensitive = false # new pool: set at creation
@@ -185,6 +186,7 @@ module "cognito" {
 
   custom_message_lambda_arn    = aws_lambda_function.cognito_message.arn
   post_confirmation_lambda_arn = aws_lambda_function.cognito_post_confirmation.arn
+  trigger_names                = ["custom_message", "post_confirmation"] # Lambdas created in the same apply
 
   tags = local.tags
 }
@@ -194,7 +196,7 @@ module "cognito" {
 
 ```hcl
 module "cognito" {
-  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.1.0"
+  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.2.0"
 
   project_name            = "weinquiz-prod"
   username_case_sensitive = false # new pool: set at creation
@@ -206,6 +208,7 @@ module "cognito" {
   reply_to_email_address = "hallo@weinquiz.ch"
 
   custom_message_lambda_arn = aws_lambda_function.cognito_message.arn
+  trigger_names             = ["custom_message"] # Lambda created in the same apply
 
   tags = local.tags
 }
@@ -215,7 +218,7 @@ module "cognito" {
 
 ```hcl
 module "cognito" {
-  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.1.0"
+  source = "git::https://github.com/aksuyek/aws-modules.git//cognito?ref=v1.2.0"
 
   project_name            = "skiboard-prod"
   username_case_sensitive = false # new pool: set at creation
@@ -227,6 +230,7 @@ module "cognito" {
   reply_to_email_address = "hallo@skiboard.ch"
 
   custom_message_lambda_arn = aws_lambda_function.cognito_message.arn
+  trigger_names             = ["custom_message"] # Lambda created in the same apply
 
   tags = local.tags
 }

@@ -47,16 +47,30 @@ locals {
   }
   custom_email_sender_kms_key_arn = try(coalesce(var.custom_email_sender_kms_key_arn), null)
 
-  # Trigger name => [unqualified function ARN, permission statement id].
   # Statement ids match the ones Futbolmetre and Ziffli already use.
+  trigger_statement_ids = {
+    pre_sign_up         = "AllowCognitoPreSignUp"
+    post_confirmation   = "AllowCognitoPostConfirmation"
+    post_authentication = "AllowCognitoPostAuthentication"
+    custom_message      = "AllowCognitoCustomMessage"
+    custom_email_sender = "AllowCognitoCustomEmailSender"
+  }
+
+  # The permission map's keys must be known at plan time. An ARN taken
+  # straight from a resource created in the same apply is unknown, null-ness
+  # included, so callers in that case list the triggers in var.trigger_names.
+  # Without it, the keys come from the ARNs that are set (fine once the
+  # Lambdas exist).
+  enabled_triggers = var.trigger_names != null ? toset(var.trigger_names) : toset([
+    for name, arn in local.trigger_arns : name if arn != null
+  ])
+
+  # Trigger name => { unqualified function ARN, permission statement id }.
   lambda_triggers = {
-    for name, t in {
-      pre_sign_up         = [local.trigger_arns.pre_sign_up, "AllowCognitoPreSignUp"]
-      post_confirmation   = [local.trigger_arns.post_confirmation, "AllowCognitoPostConfirmation"]
-      post_authentication = [local.trigger_arns.post_authentication, "AllowCognitoPostAuthentication"]
-      custom_message      = [local.trigger_arns.custom_message, "AllowCognitoCustomMessage"]
-      custom_email_sender = [local.trigger_arns.custom_email_sender, "AllowCognitoCustomEmailSender"]
-    } : name => { arn = t[0], statement_id = t[1] } if t[0] != null
+    for name in local.enabled_triggers : name => {
+      arn          = local.trigger_arns[name]
+      statement_id = local.trigger_statement_ids[name]
+    }
   }
 }
 
@@ -92,7 +106,7 @@ resource "aws_cognito_user_pool" "this" {
   }
 
   dynamic "lambda_config" {
-    for_each = length(local.lambda_triggers) > 0 ? [1] : []
+    for_each = length(local.enabled_triggers) > 0 ? [1] : []
     content {
       pre_sign_up         = local.trigger_arns.pre_sign_up
       post_confirmation   = local.trigger_arns.post_confirmation
@@ -147,6 +161,13 @@ resource "aws_cognito_user_pool" "this" {
     precondition {
       condition     = var.email_source_arn != null || local.trigger_arns.custom_email_sender != null
       error_message = "Set email_source_arn (SES, developer mode), or custom_email_sender_lambda_arn if the Lambda sends every mail itself."
+    }
+
+    precondition {
+      condition = var.trigger_names == null || (
+        toset(var.trigger_names) == toset([for name, arn in local.trigger_arns : name if arn != null])
+      )
+      error_message = "trigger_names must list exactly the triggers whose *_lambda_arn is set."
     }
 
     precondition {
@@ -227,10 +248,17 @@ resource "aws_lambda_permission" "trigger" {
   statement_id = each.value.statement_id
   action       = "lambda:InvokeFunction"
   # The function name, not the ARN: arn:aws:lambda:<region>:<account>:function:<name>
-  function_name = split(":", each.value.arn)[6]
+  function_name = try(split(":", each.value.arn)[6], "unset")
   principal     = "cognito-idp.amazonaws.com"
   # Both force replacement when changed. source_account only for permissions
   # that already exist with it (Futbolmetre).
   source_arn     = var.lambda_permission_condition == "source_arn" ? aws_cognito_user_pool.this.arn : null
   source_account = var.lambda_permission_condition == "source_account" ? split(":", aws_cognito_user_pool.this.arn)[4] : null
+
+  lifecycle {
+    precondition {
+      condition     = each.value.arn != null
+      error_message = "trigger_names lists ${each.key}, but ${each.key}_lambda_arn is not set."
+    }
+  }
 }

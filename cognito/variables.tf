@@ -92,6 +92,19 @@ variable "custom_email_sender_lambda_arn" {
   default     = null
 }
 
+variable "trigger_names" {
+  description = "The triggers whose *_lambda_arn is set, e.g. [\"custom_message\", \"post_confirmation\"]. Required when a trigger Lambda is created in the same apply as the pool (always on a fresh stack): its ARN is unknown at plan time, and the permissions need known keys. Null derives the list from the ARNs."
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition = var.trigger_names == null || alltrue([
+      for n in coalesce(var.trigger_names, []) : contains(["pre_sign_up", "post_confirmation", "post_authentication", "custom_message", "custom_email_sender"], n)
+    ])
+    error_message = "trigger_names may contain only pre_sign_up, post_confirmation, post_authentication, custom_message and custom_email_sender."
+  }
+}
+
 variable "custom_email_sender_kms_key_arn" {
   description = "KMS key Cognito encrypts codes with for the custom email sender."
   type        = string
