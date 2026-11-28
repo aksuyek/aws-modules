@@ -3,6 +3,20 @@
 All notable changes to these modules. Versions are git tags; callers pin them
 with `?ref=`.
 
+## v1.2.0 - unreleased
+
+### cognito
+
+- Fix: a fresh stack whose trigger Lambdas are created in the same apply
+  failed to plan with `Invalid for_each argument` on
+  `aws_lambda_permission.trigger`. The permission keys came from whether each
+  ARN was null, which OpenTofu cannot know for an ARN that is not created
+  yet. Reported by HB-017.
+- New optional input `trigger_names`: the triggers whose ARN is set, so the
+  keys are known at plan time. Null (the default) keeps v1.1.0's behaviour,
+  which works once the Lambdas exist (Futbolmetre, Ziffli). Preconditions
+  check that it matches the ARNs that are set.
+
 ## v1.1.0 - 2026-11-28
 
 ### cognito
